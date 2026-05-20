@@ -83,3 +83,55 @@ gopass rm -f <path>             # delete; -f skips confirmation
 ```
 
 `mv` and `cp` across mounts re-encrypt the secret with the destination store's recipient list.
+
+## Secret formats
+
+### Key-Value (default, recommended)
+
+Line 1 is the password. Subsequent lines parse as `key: value` pairs.
+
+```text
+super-secret-token
+url: https://api.example.com
+username: svc-account
+notes: rotate quarterly
+```
+
+Read with:
+```bash
+gopass show -o <path>           # just the password
+gopass show <path> url          # just the value of `url`
+```
+
+### YAML (legacy, discouraged)
+
+A body containing a `---` separator triggers the YAML parser. Avoid — unquoted numbers like `1234` get parsed as integers, and phone-number-shaped strings can become octal. If you must inspect a YAML-shaped secret, use `gopass show -n <path>`.
+
+### Plain
+
+Anything without `key: value` lines is just a multi-line password. `gopass show -o` returns the first line; `gopass show` returns everything.
+
+## Cross-secret references — `gopass://`
+
+A secret whose first line is a `gopass://` URI references another secret. When `core.follow-references` is enabled, `gopass show` transparently resolves the reference at read time, returning the target's password.
+
+Enable once per machine:
+```bash
+gopass config core.follow-references true
+```
+
+Use it to avoid duplicating a canonical credential:
+
+```text
+# Canonical secret at services/db/postgres
+the-real-password
+url: postgres://db.example.com:5432/app
+
+# Reference at apps/billing/db-creds
+gopass://services/db/postgres
+note: shares creds with the billing service
+```
+
+Then both `gopass show -o services/db/postgres` and `gopass show -o apps/billing/db-creds` return `the-real-password`. Rotating the canonical secret updates every reference automatically.
+
+Limits: references resolve at read time only; circular references error out; the URI must be the password line, not a body field. To see the literal reference rather than the resolved value, use `gopass show -n <path>`.
