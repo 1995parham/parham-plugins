@@ -290,3 +290,26 @@ gopass env services/db/postgres -- ./run-migration.sh
 ```
 
 `--keep-case` preserves the original key casing instead of upper-casing.
+
+## Pitfalls — quick reference
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Error: no key added` from `recipients add` | Short fingerprint passed | Use full 40-char fingerprint (`fpr` field from `gpg --with-colons`) |
+| `Not using invalid key 0xXXX` warnings | Recipient's key expired/invalid | If they have a valid alternative, delete the expired one from your local keyring. If not, the user is silently being dropped from new encryptions |
+| `gopass recipients` shows expired key for an email | Local keyring has both expired and new keys | `gpg --delete-keys <expired-fpr>` — display will resolve to the valid key |
+| `Pulling is not possible because you have unmerged files` | Store git repo wedged on prior merge | `git merge --abort` then decide: reset to origin or finish merge manually |
+| `! [rejected] non-fast-forward` on push | Local and remote both have new commits | Pull in the store dir, resolve, push |
+| Trailing newline in inserted password | Used `echo` to pipe value | Use `printf '%s'` (no `\n`) instead |
+| `gopass show` returns the literal `gopass://...` string | `core.follow-references` not enabled | `gopass config core.follow-references true` |
+| Multi-line insert eats the password | First line wasn't the password; used `-m` without the right structure | Ensure line 1 is the password and body follows |
+| Secret with `---` line parses weird | Triggered YAML parser | `gopass show -n` to view raw, or rewrite without `---` |
+| `recipients remove` succeeded but nothing pushed | Auto-push failed silently | Check the store git repo: `git log @{u}..HEAD` for unpushed commits, then `git push` |
+
+## Conventions for write operations
+
+1. **Confirm before destructive ops** on git-backed stores: `recipients remove`, `rm`, `fsck --decrypt`, `git reset --hard` in a store dir. These re-encrypt or rewrite history that teammates also pull.
+2. **Use full fingerprints** in `.gpg-id` rather than emails when you want to pin a specific key. Emails are easier to maintain but resolve to whatever GPG picks locally.
+3. **Verify coverage after recipient changes** with `gpg --list-packets <file>.gpg` on a representative secret, especially after a key rotation.
+4. **Don't unset auto-sync** unless you have a reason; the default keeps teammates' keyrings and `.public-keys/` in sync.
+5. **Store URLs and usernames alongside the credential** as body fields (`url:`, `username:`) so the secret is self-describing.
