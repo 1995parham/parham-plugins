@@ -213,3 +213,80 @@ gpg --batch --yes --delete-keys <expired-key-fingerprint>
 Once only the valid key matches the email in your keyring, GPG resolves the email to it, the `Not using invalid key` warning goes away, and the display updates on next listing. This is a per-developer fix that doesn't require a store-wide re-encryption.
 
 This trick does **not** help when the expired key has no valid replacement — that user's new secrets won't be encrypted to them at all until they publish a new key. Confirm coverage with `gpg --list-packets` on a recently re-encrypted secret.
+
+## Sync (git)
+
+### Normal flow
+
+Most write operations (insert, rm, mv, recipients add/remove) auto-commit and auto-push for git-backed stores. Force a manual sync with:
+
+```bash
+gopass sync                                        # all stores
+gopass sync --store=<mount>                        # one store
+gopass --nosync show <path>                        # one-off skip auto-sync
+```
+
+`sync` does: pull → fetch teammates' new public keys → push.
+
+### Recovering from a wedged merge
+
+If `gopass sync` reports `Pulling is not possible because you have unmerged files`, the store's git working tree has a conflict from a prior partial merge. To get back to a clean state:
+
+```bash
+cd <store-dir>
+git status                                         # confirm the conflict
+git diff --name-only --diff-filter=U               # list conflicted files
+git merge --abort                                  # back out the merge
+
+# Decide: keep local commits and rebase, or discard them and match remote?
+# To discard local changes:
+git reset --hard origin/<branch>
+```
+
+`git reset --hard` discards any local commits ahead of the remote — including any `recipients remove` or secret edits made since the last successful sync. Run `git log @{u}..HEAD --oneline` first to see what's about to be thrown away. After the reset, redo any work that was lost.
+
+### When local diverges and push is rejected
+
+```text
+! [rejected]  master -> master (non-fast-forward)
+```
+
+Means your local store has commits the remote doesn't, *and* the remote has commits you don't. Pull first (`git pull` in the store dir), resolve any conflicts, then push. Avoid `git push --force` on shared stores — you'll overwrite teammates' commits.
+
+## OTP / TOTP
+
+Store an `otpauth://` URL in a secret (typically on a `totp:` body line or as the password) and gopass generates time-based tokens:
+
+```bash
+gopass insert <path>                               # paste otpauth://... as the value
+gopass otp <path>                                  # print current TOTP
+gopass otp -c <path>                               # copy to clipboard
+gopass otp -p <path>                               # chain TOTP after password
+```
+
+## Audit and fsck
+
+```bash
+gopass audit                                       # decrypt all secrets, check for weak/leaked passwords
+gopass audit --format=html -o report.html          # write an HTML report
+gopass fsck --store=<mount>                        # check store integrity, fix permissions, normalize
+gopass fsck --decrypt --store=<mount>              # also re-encrypt every secret (slow)
+```
+
+`fsck --decrypt` is the canonical "re-encrypt the world after recipient churn" command. It will silently drop recipients whose keys are invalid in your local keyring at the moment it runs — verify your keyring is current before running.
+
+## Environment injection
+
+Run a subprocess with a secret's body exposed as environment variables:
+
+```bash
+# A secret with body:
+#   url: postgres://...
+#   user: app
+#   password: hunter2
+
+gopass env services/db/postgres -- ./run-migration.sh
+# inside run-migration.sh: $URL, $USER, $PASSWORD are set
+```
+
+`--keep-case` preserves the original key casing instead of upper-casing.
