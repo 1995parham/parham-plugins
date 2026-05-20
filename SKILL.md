@@ -135,3 +135,81 @@ note: shares creds with the billing service
 Then both `gopass show -o services/db/postgres` and `gopass show -o apps/billing/db-creds` return `the-real-password`. Rotating the canonical secret updates every reference automatically.
 
 Limits: references resolve at read time only; circular references error out; the URI must be the password line, not a body field. To see the literal reference rather than the resolved value, use `gopass show -n <path>`.
+
+## Multi-store / mounts
+
+```bash
+gopass mounts                                       # list mounts
+gopass mounts add <name> <path>                     # mount an existing store
+gopass mounts remove <name>                         # unmount (does not delete)
+gopass clone <git-url> <name>                       # clone a remote store and mount it
+```
+
+A mount is just a directory marker — the actual store lives at `<XDG_DATA_HOME>/gopass/stores/<name>`. Secrets under the mount path use that store's `.gpg-id`, not the root's.
+
+To check which store a given path uses:
+```bash
+gopass mounts | grep <mount-name>
+```
+
+## Recipients & encryption
+
+### List
+
+```bash
+gopass recipients                                   # all stores
+gopass recipients --store=<mount-name>              # single store
+```
+
+The display shows `email => 0xKEYID` when a recipient is identified by email. **This `=>` resolution is what GPG returns at *display* time and is not necessarily the key actually used at encryption time.** When the listed key is expired or otherwise invalid, gopass prints `Not using invalid key 0xXXX` and silently falls back to another valid key matching the same email (e.g. a newer key the user pushed). The listing won't update to reflect this until the expired key is removed from your local keyring.
+
+To see the **actual** recipients of a stored secret:
+```bash
+gpg --list-packets <store>/<path>.gpg | grep keyid
+```
+
+### Add a recipient
+
+```bash
+gopass recipients add --store=<mount> <full-40-char-fingerprint>
+```
+
+The short `0x...` form returns `Error: no key added`. Always use the full 40-character fingerprint:
+```bash
+gpg --list-keys --with-colons <email-or-keyid> | awk -F: '/^fpr/{print $10; exit}'
+```
+
+After adding, gopass re-encrypts every secret in the store to include the new recipient.
+
+### Remove a recipient
+
+```bash
+gopass recipients remove --store=<mount> <email-or-fingerprint>
+```
+
+Whatever identifier appears in `.gpg-id` works (email if added by email, fingerprint if added by fingerprint). The remove re-encrypts every secret to the *remaining* recipients.
+
+Caveat: removed recipients can still decrypt old git revisions and any local copies they have. The only way to truly revoke is to rotate every secret.
+
+### Refresh public keys from the store
+
+When a teammate publishes a new public key, they typically commit it to `.public-keys/<email>`. Pull the latest and import:
+
+```bash
+cd <store-dir> && git pull
+gpg --import .public-keys/<email>
+# or for everything new:
+gopass sync --store=<mount>
+```
+
+### The "delete expired key locally" trick
+
+When `gopass recipients` shows `email => 0xEXPIRED` for someone who has *also* published a newer valid key with the same email UID, you don't need to swap the recipient in `.gpg-id`. Just delete the expired key from your local keyring:
+
+```bash
+gpg --batch --yes --delete-keys <expired-key-fingerprint>
+```
+
+Once only the valid key matches the email in your keyring, GPG resolves the email to it, the `Not using invalid key` warning goes away, and the display updates on next listing. This is a per-developer fix that doesn't require a store-wide re-encryption.
+
+This trick does **not** help when the expired key has no valid replacement — that user's new secrets won't be encrypted to them at all until they publish a new key. Confirm coverage with `gpg --list-packets` on a recently re-encrypted secret.
