@@ -1,0 +1,24 @@
+{
+  "name": "parham-plugins",
+  "owner": {
+    "name": "Parham Alvani",
+    "email": "parham.alvani@gmail.com"
+  },
+  "description": "Personal Claude Code plugin marketplace.",
+  "plugins": [
+    {
+      "name": "gopass",
+      "source": "./plugins/gopass",
+      "description": "Operate on a gopass password store — secrets, recipients, multi-store mounts, git-backed sync, and gopass:// references.",
+      "category": "developer-tools",
+      "keywords": ["gopass", "secrets", "password-store", "gpg", "encryption", "credentials"],
+      "license": "MIT",
+      "author": {
+        "name": "Parham Alvani",
+        "email": "parham.alvani@gmail.com"
+      },
+      "homepage": "https://github.com/1995parham/parham-plugins",
+      "repository": "https://github.com/1995parham/parham-plugins"
+    }
+  ]
+}
