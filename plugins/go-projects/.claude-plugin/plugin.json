@@ -1,0 +1,13 @@
+{
+  "name": "go-projects",
+  "description": "Build production-grade Go CLI projects with urfave/cli v3, koanf v2 config, and the standard cmd/ + internal/ layout. Captures pitfalls learned in the wild.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Parham Alvani",
+    "email": "parham.alvani@gmail.com"
+  },
+  "homepage": "https://github.com/1995parham/parham-plugins",
+  "repository": "https://github.com/1995parham/parham-plugins",
+  "license": "MIT",
+  "keywords": ["go", "golang", "cli", "urfave-cli", "koanf", "project-layout", "config", "scaffolding"]
+}
