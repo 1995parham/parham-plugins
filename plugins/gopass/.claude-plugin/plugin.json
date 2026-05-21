@@ -1,0 +1,13 @@
+{
+  "name": "gopass",
+  "description": "Operate on a gopass password store — secrets, recipients, multi-store mounts, git-backed sync, and gopass:// references.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Parham Alvani",
+    "email": "parham.alvani@gmail.com"
+  },
+  "homepage": "https://github.com/1995parham/parham-plugins",
+  "repository": "https://github.com/1995parham/parham-plugins",
+  "license": "MIT",
+  "keywords": ["gopass", "secrets", "password-store", "gpg", "encryption", "credentials"]
+}
