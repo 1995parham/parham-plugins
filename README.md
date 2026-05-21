@@ -1,30 +1,46 @@
-# gopass-skill
+# parham-plugins
 
-A [Claude Code](https://docs.anthropic.com/claude-code) skill for working with the [gopass](https://www.gopass.pw/) password store.
+A [Claude Code](https://docs.claude.com/en/docs/claude-code) plugin marketplace. Currently ships one plugin:
 
-When invoked, the skill teaches Claude how to:
-
-- Show, insert, generate, move, search, and delete secrets safely
-- Manage GPG recipients on single- and multi-store setups
-- Handle git-backed sync, recover from wedged merges, and reason about auto-push behaviour
-- Use cross-secret references (`gopass://`) instead of duplicating credentials
-- Diagnose common pitfalls — invalid-key warnings, misleading recipient listings, full-fingerprint requirements, trailing-newline traps
+- **`gopass`** — work with the [gopass](https://www.gopass.pw/) password store: show / insert / generate / move / search secrets, manage GPG recipients across single- and multi-store setups, handle git-backed sync, recover from wedged merges, and resolve `gopass://` cross-secret references. Includes a pitfalls table covering invalid-key warnings, misleading recipient listings, full-fingerprint requirements, and trailing-newline traps.
 
 ## Install
 
-Clone into your Claude Code skills directory:
+Add the marketplace once, then install the plugin from it:
 
-```bash
-git clone https://github.com/1995parham/gopass-skill.git ~/.claude/skills/gopass
+```shell
+/plugin marketplace add 1995parham/parham-plugins
+/plugin install gopass@parham-plugins
 ```
 
-Or, if you maintain a plugin marketplace, add this repo as a plugin source.
+Update later with:
 
-The skill auto-activates when Claude detects gopass-related work in the conversation (e.g. you mention secrets, recipients, the password store, or run a `gopass` command). You can also invoke it explicitly with `/gopass` if your harness exposes skills as slash commands.
+```shell
+/plugin marketplace update parham-plugins
+```
 
-## What's covered
+The `gopass` skill auto-activates when Claude detects gopass-related work in the conversation (e.g. you mention secrets, recipients, the password store, or run a `gopass` command). You can also invoke it explicitly with `/gopass:gopass`.
 
-The skill content lives in [`SKILL.md`](SKILL.md). At a glance:
+## Repository layout
+
+```
+.
+├── .claude-plugin/
+│   └── marketplace.json              # marketplace catalog
+├── plugins/
+│   └── gopass/
+│       ├── .claude-plugin/
+│       │   └── plugin.json           # plugin manifest
+│       └── skills/
+│           └── gopass/
+│               └── SKILL.md          # the skill content
+├── LICENSE
+└── README.md
+```
+
+## What `gopass` covers
+
+The skill content lives in [`plugins/gopass/skills/gopass/SKILL.md`](plugins/gopass/skills/gopass/SKILL.md). At a glance:
 
 - Mental model: secrets are files, stores are directories with their own recipient list and git remote
 - Common commands: `show` / `insert` / `generate` / `find` / `mv` / `rm` / `audit` / `fsck`
@@ -33,7 +49,15 @@ The skill content lives in [`SKILL.md`](SKILL.md). At a glance:
 - Multi-store mounts
 - Recipient lifecycle, including the "delete expired key locally" trick that avoids a store-wide re-encryption
 - Sync hygiene and merge-conflict recovery
-- TOTP, audit, env injection, templates
+- TOTP, audit, env injection, environment templates
+
+## Validate locally
+
+Before pushing changes to the marketplace:
+
+```bash
+claude plugin validate .
+```
 
 ## License
 
