@@ -1,7 +1,6 @@
 ---
 name: gopass
 description: Work with the gopass password store — show, insert, generate, move, search secrets; manage recipients and GPG encryption; handle multi-store mounts; sync with git remotes; resolve cross-secret references via `gopass://`. Use whenever the user references gopass, mentions the password store, asks to read/write a secret, manage recipients, or troubleshoot encryption/sync issues.
-license: MIT
 ---
 
 # gopass
@@ -56,14 +55,16 @@ printf '\nextra: data' | gopass insert -a <path>
 ### Generate
 
 ```bash
-gopass generate <path> [length]                # cryptic password, default ~24 chars
-gopass generate -s <path> 32                   # include symbols
-gopass generate -x -n -c <path>                # xkcd-style: words + a number, capitalized
-gopass generate <path> <key> <length>          # populate a body key instead of the password
-gopass generate -p <path>                      # print after generating
+gopass generate <path> [length]                                        # cryptic password, default ~24 chars
+gopass generate -s <path> 32                                           # include symbols
+gopass generate -g xkcd --xkcd-capitalize --xkcd-numbers <path>        # xkcd-style: capitalized words + a number
+gopass generate <path> <key> <length>                                  # populate a body key instead of the password
+gopass generate -p <path>                                              # print the password after generating
+gopass generate -c <path>                                              # copy the password to clipboard
+gopass generate -f <path>                                              # force-overwrite an existing entry without prompting
 ```
 
-The default replaces only the first line (password); body is preserved. Use `-t` / `--force-regen` to overwrite the entire secret.
+`gopass generate` replaces only the first line (the password) and preserves any body key:value pairs. To regenerate an entire secret from scratch, delete it first or use `gopass insert -f`.
 
 ### Search, list, find
 
