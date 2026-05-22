@@ -1,7 +1,7 @@
 {
   "name": "go-projects",
   "description": "Build production-grade Go CLI projects with urfave/cli v3, koanf v2 config, and the standard cmd/ + internal/ layout. Captures pitfalls learned in the wild.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": {
     "name": "Parham Alvani",
     "email": "parham.alvani@gmail.com"
