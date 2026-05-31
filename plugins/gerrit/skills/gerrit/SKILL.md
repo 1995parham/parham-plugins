@@ -154,7 +154,37 @@ ssh <host> gerrit review <sha> --verified +1
 ssh <host> gerrit review <sha> --code-review +2 --submit
 ```
 
-Useful flags: `--code-review {-2..+2}`, `--verified {-1..+1}`, `-m "<message>"` (cover message), `--submit`, `--abandon`, `--restore`, `--rebase`. `gerrit review` posts a **cover** comment/vote; it does not create inline file comments (those are made through the web UI or the REST `drafts` API).
+Useful flags: `--code-review {-2..+2}`, `--verified {-1..+1}`, `-m "<message>"` (cover message), `--submit`, `--abandon`, `--restore`, `--rebase`. The flag form of `gerrit review` posts only a **cover** comment/vote. To post **inline file comments** from the CLI, pipe a `ReviewInput` JSON to `gerrit review --json` (see next section) — you do *not* need the web UI or the REST `drafts` API.
+
+## Posting inline comments — `gerrit review --json`
+
+`gerrit review <change>,<patchset> --json` reads a Gerrit [`ReviewInput`](https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#review-input) object from **stdin**. This is the scriptable way to leave inline file comments (the flag form can't). Inline comments go under `comments`, keyed by file path, each entry a `CommentInput`:
+
+```bash
+cat <<'JSON' | ssh <host> gerrit review 1051,3 --json
+{
+  "message": "Optional cover message.",
+  "comments": {
+    "path/to/file.go": [
+      { "line": 38, "unresolved": true, "message": "This builds the request with an empty URL." }
+    ]
+  }
+}
+JSON
+```
+
+Key fields per comment:
+
+- `line` — 1-based line on the **new** side of that patch set. Omit `line` (or use `"range"`) for a file-level comment.
+- `side` — `REVISION` (new, the default) or `PARENT` (left/base side). Only set when commenting on the base.
+- **`unresolved`** — **THE GOTCHA: this defaults to `false`, i.e. the comment lands already-resolved.** When you're doing a review and want the author to act on a note, you **must** set `"unresolved": true` on every comment, or it shows up pre-resolved and is easy to miss. Set it explicitly on *every* review comment.
+- `in_reply_to` — UUID of an existing comment to thread under / reopen. The thread's resolved state follows its **last** comment, so replying with `"unresolved": true` reopens a resolved thread.
+
+Caveats:
+- The path must match the patch set exactly (run `gerrit query --files` if unsure); a wrong path silently drops the comment.
+- The SSH `gerrit query --comments` output does **not** expose comment UUIDs, so you can't get an `in_reply_to` target over SSH. To reopen a specific existing thread you need the REST API (`GET /changes/<id>/comments`, which requires an HTTP password) — otherwise just **re-post the note as a new comment with `"unresolved": true`** (a minor duplicate, but it stands as an open review item).
+- Reading comments back: the JSON query exposes a comment's resolved state as `unresolved` (it may render as `null` for older comments that predate the field — treat `null`/absent as resolved).
+- `--json` and `-m/-l` are mutually exclusive in spirit: put the cover message (`message`) and label votes (`labels`) inside the JSON instead.
 
 ## Managing reviewers — `gerrit set-reviewers`
 
@@ -198,6 +228,9 @@ git log -1 --format=%B | grep -E '^Change-Id:' | awk '{print $2}' | head -n1
 | `gerrit review --code-review +2` rejected | Insufficient label permission on the project | You may only hold `+1`; an approver must cast `+2` |
 | SSH `connection refused` / hangs | Wrong port — Gerrit SSH is `29418`, not `22` | Set `Port 29418` in `~/.ssh/config` for the host |
 | Option not recognized | Option set varies by Gerrit version | `ssh <host> gerrit <cmd> --help` to see what your server supports |
+| Inline review comment lands already-resolved | `unresolved` defaults to `false` in `ReviewInput` | Set `"unresolved": true` on every review comment in the `--json` payload |
+| Can't reopen / reply to a specific existing comment over SSH | SSH query doesn't expose comment UUIDs for `in_reply_to` | Use REST `GET /changes/<id>/comments` (needs HTTP password), or just re-post the note with `"unresolved": true` |
+| Inline comment silently doesn't appear | File path in `comments` doesn't match the patch set | Verify the exact path with `gerrit query --files` |
 
 ## Conventions for write operations
 
@@ -206,3 +239,4 @@ git log -1 --format=%B | grep -E '^Change-Id:' | awk '{print $2}' | head -n1
 3. **Use `review/<CL>` branches** and delete them when done, so review checkouts never get confused with real work.
 4. **Read comments with `--patch-sets`** so you see inline threads from every patch set, not just the current one.
 5. **Check `--help` per server** — Gerrit's SSH options differ across versions; don't assume a flag exists.
+6. **Set `"unresolved": true` on inline review comments** — they default to resolved, which buries them. Only leave a comment resolved when it's truly informational and needs no author action.
