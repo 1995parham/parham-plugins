@@ -1,0 +1,13 @@
+{
+  "name": "gerrit",
+  "description": "Work with Gerrit code review over its SSH API — fetch and check out changes, query CLs, read change and inline comments, vote, and manage reviewers.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Parham Alvani",
+    "email": "parham.alvani@gmail.com"
+  },
+  "homepage": "https://github.com/1995parham/parham-plugins",
+  "repository": "https://github.com/1995parham/parham-plugins",
+  "license": "MIT",
+  "keywords": ["gerrit", "code-review", "git", "ssh", "patch-set", "change-id", "review"]
+}

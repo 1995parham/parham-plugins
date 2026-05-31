@@ -33,6 +33,20 @@
       },
       "homepage": "https://github.com/1995parham/parham-plugins",
       "repository": "https://github.com/1995parham/parham-plugins"
+    },
+    {
+      "name": "gerrit",
+      "source": "./plugins/gerrit",
+      "description": "Work with Gerrit code review over its SSH API — fetch and check out changes, query CLs, read change and inline comments, vote, and manage reviewers.",
+      "category": "developer-tools",
+      "keywords": ["gerrit", "code-review", "git", "ssh", "patch-set", "change-id", "review"],
+      "license": "MIT",
+      "author": {
+        "name": "Parham Alvani",
+        "email": "parham.alvani@gmail.com"
+      },
+      "homepage": "https://github.com/1995parham/parham-plugins",
+      "repository": "https://github.com/1995parham/parham-plugins"
     }
   ]
 }
