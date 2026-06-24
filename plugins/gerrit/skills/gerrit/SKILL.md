@@ -63,6 +63,29 @@ Conventions that keep this clean:
 - The **latest** patch set is the highest trailing number; sort the `ls-remote` output and take the last.
 - After reviewing, switch away and `git branch -D review/<n>`.
 
+## Authoring a change — always on a branch
+
+**Never author a CL on the default branch (`master`/`main`). Create a dedicated branch first**, even for a one-commit change. The push target is `refs/for/<base>` regardless, but committing on a throwaway branch keeps the local default branch clean, makes the work easy to abandon or amend, and avoids accidentally entangling unrelated local commits in the push.
+
+```bash
+# 1. Branch off the up-to-date base (one branch per change/topic)
+git fetch origin master
+git checkout -b <topic> origin/master        # e.g. grafana-admin-secret
+
+# 2. Make edits, then commit. The commit-msg hook adds the Change-Id;
+#    if it's missing, install the hook (see Setup) and `git commit --amend`.
+git add -p && git commit
+
+# 3. Push the commit as a change to the base branch
+git push --no-thin origin HEAD:refs/for/master
+#   -> remote prints the change URL, e.g. https://<host>/c/<project>/+/<NN>
+```
+
+- **One logical change per branch.** A push to `refs/for/<base>` turns each commit on the branch into a separate change — keep the branch to the single commit you intend to review.
+- **Amend, don't add, for revisions.** To upload a new patch set, `git commit --amend` (keeping the same `Change-Id`) and push again to `refs/for/<base>`.
+- **Optional push options:** `refs/for/master%wip` (work-in-progress/draft), `%topic=<name>`, `%r=<reviewer>` — append after the ref.
+- Confirm before pushing if the change is sensitive or you're unsure of the base branch — a pushed change is team-visible (though it can be abandoned).
+
 ## Querying changes — `gerrit query`
 
 ```bash
@@ -234,9 +257,10 @@ git log -1 --format=%B | grep -E '^Change-Id:' | awk '{print $2}' | head -n1
 
 ## Conventions for write operations
 
-1. **Confirm vote + message before `gerrit review`**, especially `+2`/`-2`, `--submit`, and `--abandon` — they're team-visible and hard to walk back.
-2. **Fetch the latest patch set** before reviewing; never assume patch set 1.
-3. **Use `review/<CL>` branches** and delete them when done, so review checkouts never get confused with real work.
-4. **Read comments with `--patch-sets`** so you see inline threads from every patch set, not just the current one.
-5. **Check `--help` per server** — Gerrit's SSH options differ across versions; don't assume a flag exists.
-6. **Set `"unresolved": true` on inline review comments** — they default to resolved, which buries them. Only leave a comment resolved when it's truly informational and needs no author action.
+1. **Always author a CL on a dedicated branch, never on `master`/`main`** — `git checkout -b <topic> origin/master` before committing, one logical change per branch, then push to `refs/for/<base>`.
+2. **Confirm vote + message before `gerrit review`**, especially `+2`/`-2`, `--submit`, and `--abandon` — they're team-visible and hard to walk back.
+3. **Fetch the latest patch set** before reviewing; never assume patch set 1.
+4. **Use `review/<CL>` branches** and delete them when done, so review checkouts never get confused with real work.
+5. **Read comments with `--patch-sets`** so you see inline threads from every patch set, not just the current one.
+6. **Check `--help` per server** — Gerrit's SSH options differ across versions; don't assume a flag exists.
+7. **Set `"unresolved": true` on inline review comments** — they default to resolved, which buries them. Only leave a comment resolved when it's truly informational and needs no author action.
