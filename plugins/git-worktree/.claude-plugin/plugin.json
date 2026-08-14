@@ -1,0 +1,13 @@
+{
+  "name": "git-worktree",
+  "description": "Isolate concurrent, unrelated changes in one repository into separate git worktrees instead of stashing, stacking, or branch-hopping on a single checkout.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Parham Alvani",
+    "email": "parham.alvani@gmail.com"
+  },
+  "homepage": "https://github.com/1995parham/parham-plugins",
+  "repository": "https://github.com/1995parham/parham-plugins",
+  "license": "MIT",
+  "keywords": ["git", "worktree", "branch", "parallel", "isolation", "stash", "workflow"]
+}
