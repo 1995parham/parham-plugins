@@ -18,14 +18,14 @@ load-bearing example.
 
 | Decision | Pick | Reason |
 | --- | --- | --- |
-| Go version | Latest stable (1.26 as of 2026-05). Pin `go 1.26` in `go.mod`; let `toolchain` auto-upgrade patch releases. | Modern stdlib (`slog`, `slices`, `maps`, `iter`, `cmp`, `synctest`) and language features (range-over-int, range-over-func, generic type aliases, `new(expr)`) are only available on recent toolchains. Bump within a release of upstream. |
+| Go version | Latest stable (1.27, released 2026-08). Pin `go 1.27` in `go.mod`; let `toolchain` auto-upgrade patch releases. | Modern stdlib (`slog`, `slices`, `maps`, `iter`, `cmp`, `synctest`, `encoding/json/v2`) and language features (range-over-int, range-over-func, generic type aliases, `new(expr)`, generic methods) are only available on recent toolchains. Bump within a release of upstream. |
 | Logger | `log/slog` (stdlib) | Structured logging in the stdlib since 1.21; no third-party dependency. Use `zap`/`zerolog` only when an existing repo already commits to it. |
 | CLI framework | `github.com/urfave/cli/v3` | Stdlib `context.Context` plumbing built in; smaller surface than cobra; no codegen. (koochooloo uses cobra; both are acceptable, but new repos pick urfave v3.) |
 | Config | `github.com/knadh/koanf/v2` | Provider/parser split keeps the binary small. Layers defaults → file → env → flags cleanly. |
 | Config format | TOML (koochooloo) or YAML | TOML matches the koochooloo precedent; YAML is fine for human-edited config. Both via koanf parsers. |
 | Project layout | [golang-standards/project-layout](https://github.com/golang-standards/project-layout) — `cmd/<binary>/main.go` + `internal/cmd` + `internal/infra` + `internal/domain`, plus `api/`, `configs/`, `deployments/`, `build/package/`, `docs/` as needed. | Community-consensus layout; predictable for outside contributors. Note it is community, not officially blessed by the Go team — but the convention is broad enough that following it is the path of least friction. |
 | DI | none for small CLIs; **`go.uber.org/fx`** once the dependency graph grows (HTTP server + DB + queue + scheduler + telemetry). | fx gives lifecycle hooks (`OnStart`/`OnStop`), graceful shutdown ordering, and graph validation at startup. Constructor-injection style fits Go better than tags-on-structs. Reach for it when you find yourself writing a 40-line `main` that wires components by hand. |
-| HTTP framework | `github.com/labstack/echo/v4` (default) or `github.com/gofiber/fiber/v3` (when raw throughput matters more than stdlib compatibility) | Both have first-class middleware, route groups, validators, and OpenTelemetry instrumentation. Pick one per repo; do not mix. Echo's `net/http` compatibility makes it the safer default; fiber's fasthttp engine wins on benchmarks but breaks the `http.Handler` contract. Stdlib `net/http` + `ServeMux` (1.22+) is fine for the smallest services. |
+| HTTP framework | `github.com/labstack/echo/v5` (default) or `github.com/gofiber/fiber/v3` (when raw throughput matters more than stdlib compatibility) | Both have first-class middleware, route groups, validators, and OpenTelemetry instrumentation. Pick one per repo; do not mix. Echo's `net/http` compatibility makes it the safer default; fiber's fasthttp engine wins on benchmarks but breaks the `http.Handler` contract. Stdlib `net/http` + `ServeMux` (1.22+) is fine for the smallest services. |
 | Postgres driver | `github.com/jackc/pgx/v5` (direct or via `database/sql` adapter) — **not** GORM. | Native Postgres types (arrays, JSON, ranges, LISTEN/NOTIFY), no reflection-heavy ORM layer, predictable SQL. Pair with `sqlc` for type-safe queries or write SQL by hand. GORM hides cost, surfaces footguns (N+1, auto-migrate in prod), and the abstraction leaks when you need anything Postgres-specific. |
 | Metrics | `github.com/prometheus/client_golang/prometheus` + `/metrics` HTTP endpoint | Prometheus is the de-facto standard; the official client is well-maintained. Register collectors in `internal/infra/metrics`; expose via the same HTTP server or a sidecar mux. |
 | Tracing | OpenTelemetry — `go.opentelemetry.io/otel` + an OTLP exporter | Vendor-neutral; switches backends (Jaeger, Tempo, Honeycomb, Datadog) by swapping the exporter. Use the contrib instrumentations for echo/fiber/pgx/grpc; don't hand-instrument what's already covered. |
@@ -106,9 +106,9 @@ binary or from `go test`.
 
 ## Modern Go — what to reach for first
 
-The latest stable Go is **1.26** (released 2026-02-10; 1.26.3 is the current
-patch). Pin `go 1.26` in `go.mod`. The standard library has absorbed most of
-what people used to pull in third-party packages for — reach for stdlib first.
+The latest stable Go is **1.27** (released 2026-08). Pin `go 1.27` in
+`go.mod`. The standard library has absorbed most of what people used to pull in
+third-party packages for — reach for stdlib first.
 
 Features worth using by default:
 
@@ -152,7 +152,120 @@ Features worth using by default:
   `var x *T; errors.As(err, &x)` dance.
 - **`go fix` modernizers** (1.26) — `go fix ./...` will rewrite legacy patterns
   (`interface{}` → `any`, `sort.Slice` → `slices.Sort`, etc.) to their modern
-  equivalents. Run it after a Go upgrade.
+  equivalents. Run it after a Go upgrade. 1.27 adds `atomictypes`, `embedlit`,
+  `slicesbackward` and `unsafefuncs`; drops `fmtappendf`; renames `waitgroup`
+  to `waitgroupgo`.
+- **`strings.CutLast` / `bytes.CutLast`** (1.27) — split around the *last*
+  separator. Replaces the `LastIndex` + manual re-slicing dance, and is more
+  precise than a `Contains` check when you mean "the trailing segment":
+  `_, commit, ok := strings.CutLast(version, "-")`.
+- **Generic methods** (1.27) — methods may now declare their own type
+  parameters (`func (r *Rand) N[Int intType](n Int) Int`). Two restrictions
+  that bite: interface methods still cannot declare type parameters, and a
+  generic method does **not** satisfy an interface. Keep generic methods on
+  concrete types; keep interfaces monomorphic.
+- **`testing/synctest.Sleep`** (1.27) — `time.Sleep` + `synctest.Wait` in one
+  call. Inside a `synctest.Test` bubble the clock is synthetic, so an
+  expiry/TTL test that used to cost a real second now costs nothing. Watch the
+  boundary: a fake-clock sleep lands *exactly* on the deadline, so code that
+  tests expiry with a strict `Before(time.Now())` needs you to step past it.
+- **`net/http/httptest.NewTestServer`** (1.27) — a `Server` on an in-memory
+  fake network. Unlike `httptest.NewServer` it works inside a synctest bubble.
+- **`encoding/json/v2` + `encoding/json/jsontext`** (1.27) — v1 is now backed
+  by v2, so you get the much faster unmarshal for free with no code change.
+  Import v2 explicitly when you want its stricter defaults (rejects duplicate
+  object names and invalid UTF-8) or the `Options` API.
+- **`goroutineleak` profile** (1.27, GA) — `runtime/pprof` and
+  `/debug/pprof/goroutineleak` report goroutines permanently blocked on a
+  channel or mutex. Worth wiring `net/http/pprof` into the admin/metrics mux of
+  any long-running service just for this.
+- **`net/url` `URL.Clone` / `Values.Clone`** (1.27) — deep copies; stop
+  hand-rolling them before mutating a request URL.
+- **`hash/maphash.Hasher` / `ComparableHasher`** (1.27) — the standard contract
+  for feeding your own types to hash-based containers.
+- **`math/big.Int.Divide`** (1.27) — quotient+remainder with an explicit
+  rounding mode (`Trunc`, `Floor`, `Round`, `Ceil`) instead of `Quo`/`Div`
+  coin-flips.
+- **`crypto/mldsa`** (1.27) — post-quantum ML-DSA (FIPS 204), wired through
+  `crypto/x509` and TLS 1.3 (`MLDSA44/65/87`, plus `MLKEM1024` key exchange).
+
+### Upgrading a repo to a new Go release
+
+The order that avoids thrash:
+
+1. Bump `go 1.X` in `go.mod`, then `go mod tidy`. From `go 1.27` on, tidy also
+   merges duplicate `require` blocks down to at most two (direct, indirect).
+2. Bump the builder image in `build/package/Dockerfile` (`golang:1.X-bookworm`)
+   to match. CI needs no change if `actions/setup-go` uses
+   `go-version-file: "go.mod"`.
+3. `go build ./... && go test ./...`. From 1.27 `go test` runs the `stdversion`
+   vet check by default, so anything referencing stdlib symbols newer than your
+   `go` directive fails here rather than at a user's build.
+4. `go fix ./...` to apply the release's new modernizers.
+5. **Run `golangci-lint` last, and expect new findings from the bump itself.**
+   Two categories, both real:
+   - `exhaustruct` flags struct literals that were exhaustive until the stdlib
+     grew a field. Go 1.27 added `MaxHeaderValueCount` and
+     `DisableClientPriority` to `http.Server`, so every fully-specified
+     `&http.Server{...}` needs both added.
+   - `modernize` starts suggesting the new release's rewrites, which can
+     conflict with another linter (see the `embedlit` trap below).
+
+#### The `embedlit` / `exhaustruct` deadlock (Go 1.27)
+
+Go 1.27 lets struct-literal keys be any valid field selector, so promoted
+fields can be hoisted into the outer literal, and `modernize`'s `embedlit`
+will tell you to do it:
+
+```go
+// before — modernize: "embedded field type can be removed from struct literal"
+claims := Claims{
+    RegisteredClaims: jwt.RegisteredClaims{Subject: id, IssuedAt: now},
+    Username:         user.Username,
+}
+
+// after — what embedlit wants
+claims := Claims{Subject: id, IssuedAt: now, Username: user.Username}
+```
+
+**exhaustruct v5.0.3 panics** (`makeslice: cap out of range`) on *any* literal
+that keys a promoted field — exhaustive or not. A panicking analyzer aborts the
+whole run and **cannot be suppressed with `//nolint`**, because suppression is
+applied after analysis. So the working combination today is: keep the nested
+literal and suppress the *suggestion* instead.
+
+```go
+//nolint:modernize // embedlit output crashes exhaustruct_v5; revisit when it groks Go 1.27.
+claims := Claims{
+    RegisteredClaims: jwt.RegisteredClaims{ //nolint:exhaustruct_v5 // only the set fields matter.
+```
+
+Generalize the lesson: when a linter *crashes* rather than reports, `//nolint`
+is not an option — you must change the code or disable the linter globally.
+
+#### `exhaustruct` was renamed in golangci-lint v2.13.0
+
+v2.13.0 deprecated `exhaustruct` and added `exhaustruct_v5`. With
+`default: all` **both run**, so every literal is reported twice, and every
+existing `//nolint:exhaustruct` silences only the deprecated one. The fix is
+mechanical:
+
+```yaml
+linters:
+  disable:
+    # deprecated in v2.13.0; exhaustruct_v5 replaces it and the two
+    # double-report every literal when both are on.
+    - exhaustruct
+```
+
+```console
+$ grep -rl nolint --include='*.go' . \
+    | xargs perl -pi -e 's/\bexhaustruct\b(?!_v5)/exhaustruct_v5/g if /nolint/'
+```
+
+Check `golangci-lint help linters` for `[deprecated]` markers after every
+linter upgrade — a rename silently turns a whole class of suppressions into
+dead comments.
 
 Things to stop reaching for:
 
@@ -450,11 +563,13 @@ Rules of thumb:
 Two workflows in koochooloo:
 
 - `test.yaml` — **`lint` job is mandatory** and runs on every push/PR via
-  `golangci/golangci-lint-action@v8` (or current major). It must block merges.
+  `golangci/golangci-lint-action@v9` (or current major). It must block merges.
   Then a `test` job (with codecov upload), and a `build` job that runs after
-  both pass. Use `actions/setup-go@v6` with `go-version-file: "go.mod"` so
+  both pass. Use `actions/setup-go@v7` with `go-version-file: "go.mod"` so
   the runner tracks `go.mod` automatically — and bump `go.mod` to the latest
-  stable Go (`go 1.26` at time of writing) so the runner picks it up.
+  stable Go (`go 1.27` at time of writing) so the runner picks it up.
+  Note `version: latest` on the lint action means a linter release can turn CI
+  red without a code change — see the `exhaustruct` rename above.
 - `codeql.yml` — security analysis on push, pull request, and a weekly cron
   (`0 6 * * 1`).
 
@@ -464,11 +579,11 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: "go.mod"
-      - uses: golangci/golangci-lint-action@v8
+      - uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           args: --timeout=5m
@@ -536,7 +651,12 @@ When working with JetStream from Go:
 | Linter complains about wsl/varnamelen everywhere | Default golangci-lint config | Disable *that linter only* in `.golangci.yml` with a one-line "why" comment; suppress single sites with `//nolint:<linter> // <reason>` |
 | `revive` flags every exported type/function | Missing godoc comments | Add `// Name ...` godoc comments; do NOT disable revive |
 | `nolintlint` rejects your suppression | Bare `//nolint` or missing reason | Use `//nolint:<linter> // <why this code is the exception>` |
-| `go.mod` stuck on an old `go 1.X` | Never bumped after install | Set `go 1.26` (latest stable) and let `toolchain` pin the patch; CI's `go-version-file: go.mod` follows |
+| `go.mod` stuck on an old `go 1.X` | Never bumped after install | Set `go 1.27` (latest stable) and let `toolchain` pin the patch; CI's `go-version-file: go.mod` follows |
+| golangci-lint dies with `Panic: exhaustruct_v5 ... makeslice: cap out of range` | A struct literal keys a promoted field (Go 1.27 syntax); exhaustruct v5.0.3 can't parse it | Keep the nested literal and `//nolint:modernize` the `embedlit` suggestion — a crashing analyzer ignores `//nolint` |
+| Every `//nolint:exhaustruct` stopped working after a linter bump | v2.13.0 renamed it to `exhaustruct_v5` and runs both | Disable the deprecated `exhaustruct` and rename the directives (see above) |
+| Exhaustive `&http.Server{...}` suddenly incomplete | Go 1.27 added `MaxHeaderValueCount` and `DisableClientPriority` | Add both; zero/false are the correct defaults |
+| Test sleeps a real second waiting for a TTL | `time.Sleep` against the wall clock | Wrap the body in `synctest.Test` and use `synctest.Sleep` (1.27) — synthetic clock, instant |
+| `synctest` expiry test flakes at the boundary | Fake-clock sleep lands *exactly* on the deadline; `IsExpired` uses a strict `Before` | Sleep past the deadline, not onto it |
 | `tools.go` blank imports drift from CI versions | Pre-1.24 tooling pattern | Migrate to `tool` directive in `go.mod` (`go tool add <path>`) and `go tool <name>` to run |
 | Binary at repo root instead of `./cmd/<binary>` | `main.go` left at top level | Move to `cmd/<binary>/main.go`; update justfile target |
 
@@ -571,9 +691,11 @@ When working with JetStream from Go:
 - **Library, not binary.** Drop `cmd/`; export from the repo root. Don't
   make consumers traverse `internal/` paths.
 - **HTTP service.** Default stack:
-  - **`echo/v4`** (or `fiber/v3` if you've benchmarked and need fasthttp).
+  - **`echo/v5`** (or `fiber/v3` if you've benchmarked and need fasthttp).
     Mount under `internal/infra/http` with handlers; route registration goes
-    in a `Register(e *echo.Echo, deps ...)` per group.
+    in a `Register(g *echo.Group)` method per handler group. Note v5 changed
+    the handler signature: the context is a concrete `*echo.Context` pointer,
+    not v4's `echo.Context` interface — `func (h URL) List(c *echo.Context) error`.
   - **`pgx/v5`** for Postgres in `internal/infra/db` — never GORM. Pair with
     `sqlc` if you want type-safe generated query code.
   - **`prometheus`** collectors in `internal/infra/metrics`, exposed at
@@ -597,7 +719,8 @@ When working with JetStream from Go:
 
 - **[1995parham/koochooloo](https://github.com/1995parham/koochooloo)** —
   full reference project: cobra root, koanf TOML config with `structs`
-  defaults, MongoDB infra under `internal/infra/db`, OTel telemetry, fx DI,
+  defaults, echo v5 + GORM (postgres/mysql/sqlite) under `internal/infra`,
+  JWT + OIDC auth, an embedded React admin SPA, OTel telemetry, fx DI,
   k6 load tests, docker-bake, codecov.
 - **[1995parham/natsie](https://github.com/1995parham/natsie)** — small CLI
   applying this skill: urfave/cli v3 + koanf YAML + carlmjohnson/versioninfo.
